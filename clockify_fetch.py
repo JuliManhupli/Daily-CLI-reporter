@@ -1,5 +1,6 @@
 import os
-
+from datetime import datetime
+from collections import defaultdict
 import requests
 from dotenv import load_dotenv
 
@@ -35,14 +36,83 @@ def get_time_entries(api_key, workspace_id, user_id):
     return response
 
 
+def display_time_entries(time_entries):
+    """Display each time entry."""
+    for entry in time_entries:
+        description = entry.get('description', 'No description')
+        start_time = entry['timeInterval']['start']
+        end_time = entry['timeInterval']['end']
+        duration = entry['timeInterval'].get('duration', 'No duration')
+
+        start_time = datetime.fromisoformat(start_time[:-1])
+        end_time = datetime.fromisoformat(end_time[:-1]) if end_time else 'Ongoing'
+
+        print(f"Task: {description}")
+        print(f"  Start Time: {start_time}")
+        print(f"  End Time: {end_time}")
+        print(f"  Duration: {duration}")
+        print()
+
+
+def group_by_date_and_task(time_entries):
+    """Group time entries by date and task, and calculate total time spent."""
+    grouped_data = defaultdict(lambda: defaultdict(lambda: {'total_time': 0, 'entries': []}))
+
+    for entry in time_entries:
+        description = entry.get('description', 'No description')
+        start_time = entry['timeInterval']['start']
+        end_time = entry['timeInterval']['end']
+        duration = entry['timeInterval'].get('duration', None)
+
+        start_time = datetime.fromisoformat(start_time[:-1])
+        end_time = datetime.fromisoformat(end_time[:-1]) if end_time else datetime.now()
+
+        date_key = start_time.date()
+
+        if duration is not None:
+            try:
+                duration_seconds = int(duration)
+            except ValueError:
+                duration_seconds = (end_time - start_time).total_seconds()
+        else:
+            duration_seconds = (end_time - start_time).total_seconds()
+
+        # Group by date and task description
+        grouped_data[date_key][description]['total_time'] += duration_seconds
+        grouped_data[date_key][description]['entries'].append({
+            'start_time': start_time,
+            'end_time': end_time,
+            'duration': duration_seconds
+        })
+
+    return grouped_data
+
+
+def display_report(grouped_data):
+    """Display the grouped report."""
+    for date, tasks in grouped_data.items():
+        print('-' * 50)
+        print(f"\nDate: {date}")
+        for task, data in tasks.items():
+            print(f"\n\tTask: {task}")
+            print(f"\t\tTotal Time: {data['total_time'] / 3600:.2f} hours")
+            for entry in data['entries']:
+                print(f"\t\t- Start: {entry['start_time']} End: {entry['end_time']} Duration: {entry['duration'] / 3600:.2f} hours")
+        print('-' * 50)
+
+
 def main():
     env_vars = load_env_vars()
     response = get_time_entries(env_vars['API_KEY'], env_vars['WORKSPACE_ID'], env_vars['USER_ID'])
 
     if response.status_code == 200:
         time_entries = response.json()
-        for idx, entry in enumerate(time_entries, start=1):
-            print(f"Task {idx}: {entry['description']}")
+        if time_entries:
+            display_time_entries(time_entries)
+            grouped_data = group_by_date_and_task(time_entries)
+            display_report(grouped_data)
+        else:
+            print("No time entries found.")
     else:
         print('Failed to fetch time entries', response.status_code)
 
