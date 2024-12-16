@@ -1,9 +1,12 @@
 import os
 from datetime import datetime
 from collections import defaultdict
+
+import pytz
 import requests
 from dotenv import load_dotenv
 
+ukraine_tz = pytz.timezone('Europe/Kyiv')
 
 def load_env_vars():
     """Load environment variables from a .env file and validate them."""
@@ -44,12 +47,15 @@ def display_time_entries(time_entries):
         end_time = entry['timeInterval']['end']
         duration = entry['timeInterval'].get('duration', 'No duration')
 
-        start_time = datetime.fromisoformat(start_time[:-1])
-        end_time = datetime.fromisoformat(end_time[:-1]) if end_time else 'Ongoing'
+        start_time = datetime.fromisoformat(start_time[:-1]).replace(tzinfo=pytz.UTC)
+        end_time = datetime.fromisoformat(end_time[:-1]).replace(tzinfo=pytz.UTC) if end_time else None
+
+        start_time_ukraine = start_time.astimezone(ukraine_tz).replace(tzinfo=None)
+        end_time_ukraine = end_time.astimezone(ukraine_tz).replace(tzinfo=None) if end_time else "Ongoing"
 
         print(f"Task: {description}")
-        print(f"  Start Time: {start_time}")
-        print(f"  End Time: {end_time}")
+        print(f"  Start Time: {start_time_ukraine}")
+        print(f"  End Time: {end_time_ukraine}")
         print(f"  Duration: {duration}")
         print()
 
@@ -64,8 +70,11 @@ def group_by_date_and_task(time_entries):
         end_time = entry['timeInterval']['end']
         duration = entry['timeInterval'].get('duration', None)
 
-        start_time = datetime.fromisoformat(start_time[:-1])
-        end_time = datetime.fromisoformat(end_time[:-1]) if end_time else datetime.now()
+        start_time = datetime.fromisoformat(start_time[:-1]).replace(tzinfo=pytz.UTC)
+        end_time = datetime.fromisoformat(end_time[:-1]).replace(tzinfo=pytz.UTC) if end_time else datetime.now()
+
+        start_time_ukraine = start_time.astimezone(ukraine_tz).replace(tzinfo=None)
+        end_time_ukraine = end_time.astimezone(ukraine_tz).replace(tzinfo=None)
 
         date_key = start_time.date()
 
@@ -73,15 +82,15 @@ def group_by_date_and_task(time_entries):
             try:
                 duration_seconds = int(duration)
             except ValueError:
-                duration_seconds = (end_time - start_time).total_seconds()
+                duration_seconds = (end_time_ukraine - start_time_ukraine).total_seconds()
         else:
-            duration_seconds = (end_time - start_time).total_seconds()
+            duration_seconds = (end_time_ukraine - start_time_ukraine).total_seconds()
 
         # Group by date and task description
         grouped_data[date_key][description]['total_time'] += duration_seconds
         grouped_data[date_key][description]['entries'].append({
-            'start_time': start_time,
-            'end_time': end_time,
+            'start_time': start_time_ukraine,
+            'end_time': end_time_ukraine,
             'duration': duration_seconds
         })
 
